@@ -7,8 +7,11 @@ import 'package:permission_handler/permission_handler.dart';
 import 'models/audio_item.dart';
 import 'services/audio_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Enforce memory-safe image cache limits to prevent OOM
+  PaintingBinding.instance.imageCache.maximumSize = 1000;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 40 * 1024 * 1024; // 40MB cap
   runApp(const AlbumArtFixerApp());
 }
 
@@ -24,30 +27,372 @@ class AlbumArtFixerApp extends StatelessWidget {
       darkTheme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0F1117),
+        scaffoldBackgroundColor: Colors.black, // One UI AMOLED Black
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFFFB74D), // Warm Amber
-          secondary: Color(0xFF64FFDA), // Mint Cyan
-          surface: Color(0xFF171B24),
-          surfaceContainerHighest: Color(0xFF222836),
-          onPrimary: Colors.black,
+          primary: Color(0xFF387AFF), // Authentic Samsung Blue from Figma Kit
+          secondary: Color(0xFF34D399), // Mint Green
+          surface: Color(0xFF17171A), // Authentic One UI Card Surface from Figma Kit
+          surfaceContainerHighest: Color(0xFF242429),
+          onPrimary: Colors.white,
         ),
         cardTheme: CardThemeData(
-          color: const Color(0xFF171B24),
+          color: const Color(0xFF17171A),
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: Color(0xFF272F3E), width: 1),
+            borderRadius: BorderRadius.circular(26), // Authentic One UI 26px Squircle
           ),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0F1117),
+          backgroundColor: Colors.black,
           elevation: 0,
-          centerTitle: true,
           scrolledUnderElevation: 0,
         ),
       ),
-      home: const HomeScreen(),
+      home: const SplashScreen(),
+    );
+  }
+}
+
+/// One UI Splash Screen
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _animController;
+  late Animation<double> _fadeAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
+    _animController.forward();
+    _initApp();
+  }
+
+  Future<void> _initApp() async {
+    await AudioService.initCache();
+    await Future.delayed(const Duration(milliseconds: 1000));
+    final hasPerm = Platform.isAndroid
+        ? (await Permission.manageExternalStorage.isGranted ||
+            await Permission.storage.isGranted)
+        : true;
+
+    if (mounted) {
+      final targetScreen = hasPerm
+          ? const HomeScreen()
+          : const PermissionOnboardingScreen();
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 350),
+          pageBuilder: (_, _, _) => targetScreen,
+          transitionsBuilder: (_, animation, _, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Center(
+        child: FadeTransition(
+          opacity: _fadeAnim,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF17171A),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF387AFF).withAlpha(60), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF387AFF).withAlpha(35),
+                      blurRadius: 32,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.album_rounded,
+                  color: Color(0xFF387AFF),
+                  size: 46,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Album Art Fixer',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Audio artwork optimizer',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF848487),
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: 36),
+              const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF387AFF)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One UI Permission Onboarding Screen (Exact Figma Tokens)
+class PermissionOnboardingScreen extends StatefulWidget {
+  const PermissionOnboardingScreen({super.key});
+
+  @override
+  State<PermissionOnboardingScreen> createState() =>
+      _PermissionOnboardingScreenState();
+}
+
+class _PermissionOnboardingScreenState extends State<PermissionOnboardingScreen> {
+  bool _isRequesting = false;
+
+  Future<void> _requestAccess() async {
+    setState(() => _isRequesting = true);
+    bool granted = false;
+
+    if (Platform.isAndroid) {
+      final req = await Permission.manageExternalStorage.request();
+      if (req.isGranted) {
+        granted = true;
+      } else {
+        final legacy = await Permission.storage.request();
+        granted = legacy.isGranted;
+      }
+    } else {
+      granted = true;
+    }
+
+    if (mounted) {
+      setState(() => _isRequesting = false);
+      if (granted) {
+        _goToHome();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Storage access not granted. You can still explore the app.'),
+            backgroundColor: Color(0xFF241818),
+          ),
+        );
+      }
+    }
+  }
+
+  void _goToHome() {
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 350),
+        pageBuilder: (_, _, _) => const HomeScreen(),
+        transitionsBuilder: (_, animation, _, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Spacer(flex: 1),
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF17171A),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF387AFF).withAlpha(50), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF387AFF).withAlpha(25),
+                      blurRadius: 28,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.album_rounded,
+                  color: Color(0xFF387AFF),
+                  size: 42,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Storage access',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Album Art Fixer inspects audio metadata and updates incompatible covers directly on your device.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF848487),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 28),
+
+              // Grouped Features Card (One UI 26px Radius)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF17171A),
+                  borderRadius: BorderRadius.circular(26),
+                  border: Border.all(color: const Color(0xFF2E2E30)),
+                ),
+                child: Column(
+                  children: [
+                    _buildFeatureRow(
+                      icon: Icons.folder_special_rounded,
+                      iconColor: const Color(0xFF387AFF),
+                      title: 'Audio file inspection',
+                      desc: 'Scans FLAC, MP3, M4A, OGG, and WAV tags.',
+                    ),
+                    const Divider(color: Color(0xFF2E2E30), height: 26),
+                    _buildFeatureRow(
+                      icon: Icons.auto_fix_high_rounded,
+                      iconColor: const Color(0xFF34D399),
+                      title: 'Hardware DAP fix',
+                      desc: 'Transcodes progressive/CMYK art to Baseline sRGB.',
+                    ),
+                    const Divider(color: Color(0xFF2E2E30), height: 26),
+                    _buildFeatureRow(
+                      icon: Icons.lock_outline_rounded,
+                      iconColor: const Color(0xFF848487),
+                      title: '100% offline & private',
+                      desc: 'Zero network permissions. Files stay on your device.',
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(flex: 2),
+
+              // One UI Rounded Pill Action Button (Samsung Blue)
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton.icon(
+                  onPressed: _isRequesting ? null : _requestAccess,
+                  icon: _isRequesting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.security_rounded, size: 20),
+                  label: Text(
+                    _isRequesting ? 'Requesting...' : 'Grant all files access',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF387AFF),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(27)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: _goToHome,
+                child: const Text(
+                  'Not now / explore app',
+                  style: TextStyle(color: Color(0xFF848487), fontSize: 13),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureRow({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String desc,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withAlpha(25),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(icon, color: iconColor, size: 20),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                desc,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF848487)),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -64,10 +409,11 @@ class _HomeScreenState extends State<HomeScreen> {
   List<AudioItem> _items = [];
   bool _isBusy = false;
   bool _isCancelled = false;
-  String _statusMessage = 'Choose your music folder or SD card to begin.';
+  String _statusMessage = 'Choose music directory or SD card to begin.';
   double _progress = 0.0;
   String _currentFile = '';
   String _searchQuery = '';
+  bool _showSettings = false;
 
   // Settings
   int _targetDimension = 1000;
@@ -75,25 +421,29 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _exportFolderCover = true;
   String _selectedFilter = 'All';
 
-  @override
-  void initState() {
-    super.initState();
-    _requestPermissions();
-  }
-
-  Future<void> _requestPermissions() async {
-    if (Platform.isAndroid) {
-      if (await Permission.manageExternalStorage.isRestricted ||
-          !await Permission.manageExternalStorage.isGranted) {
-        await Permission.manageExternalStorage.request();
-      }
-      await Permission.audio.request();
-      await Permission.storage.request();
-    }
+  Future<bool> _ensureStoragePermission() async {
+    if (!Platform.isAndroid) return true;
+    final status = await Permission.manageExternalStorage.status;
+    if (status.isGranted) return true;
+    final req = await Permission.manageExternalStorage.request();
+    if (req.isGranted) return true;
+    final legacy = await Permission.storage.request();
+    return legacy.isGranted;
   }
 
   Future<void> _pickDirectory() async {
-    await _requestPermissions();
+    final hasPerm = await _ensureStoragePermission();
+    if (!hasPerm) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Storage permission is required to read & update album artwork.'),
+            backgroundColor: Color(0xFF241818),
+          ),
+        );
+      }
+      return;
+    }
 
     final result = await FilePicker.getDirectoryPath(
       dialogTitle: 'Select Music Directory or SD Card',
@@ -103,8 +453,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _selectedDirectory = result;
         _items.clear();
-        _statusMessage =
-            'Folder selected. Tap "Scan Library" to inspect artwork.';
+        _statusMessage = 'Folder selected. Tap "Scan library" below.';
         _progress = 0.0;
         _currentFile = '';
       });
@@ -113,20 +462,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _runProcess({required bool isConvertMode}) async {
     if (_selectedDirectory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a folder first')),
-      );
+      await _pickDirectory();
       return;
     }
 
     setState(() {
       _isBusy = true;
       _isCancelled = false;
-      _statusMessage = isConvertMode
-          ? 'Converting artwork to Baseline JPEG…'
-          : 'Scanning audio library…';
       _progress = 0.0;
-      _currentFile = '';
+      _statusMessage = isConvertMode
+          ? 'Converting selected covers to Baseline sRGB...'
+          : 'Scanning tracks & binary JPEG markers...';
       if (!isConvertMode) {
         _items.clear();
       }
@@ -146,41 +492,54 @@ class _HomeScreenState extends State<HomeScreen> {
     final scannedItems = <AudioItem>[];
     int convertedCount = 0;
 
-    for (int i = 0; i < total; i++) {
+    const chunkSize = 16;
+    for (int i = 0; i < total; i += chunkSize) {
       if (!mounted || _isCancelled) break;
-      final file = files[i];
-
-      setState(() {
-        _currentFile = file.path.split(Platform.pathSeparator).last;
-        _progress = (i + 1) / total;
-      });
+      final end = (i + chunkSize < total) ? i + chunkSize : total;
+      final chunk = files.sublist(i, end);
 
       if (!isConvertMode) {
-        // Scan mode
-        final item = await AudioService.inspectAudioFile(file);
-        scannedItems.add(item);
+        final chunkResults = await Future.wait(
+          chunk.map((f) => AudioService.inspectAudioFile(f)),
+        );
+        scannedItems.addAll(chunkResults);
       } else {
-        // Convert mode: only process selected items
-        AudioItem? item;
-        final existingIndex = _items.indexWhere((it) => it.path == file.path);
-        if (existingIndex >= 0) {
-          item = _items[existingIndex];
-        } else {
-          item = await AudioService.inspectAudioFile(file);
-          scannedItems.add(item);
-        }
+        await Future.wait(
+          chunk.map((file) async {
+            AudioItem? item;
+            final existingIndex = _items.indexWhere((it) => it.path == file.path);
+            if (existingIndex >= 0) {
+              item = _items[existingIndex];
+            } else {
+              item = await AudioService.inspectAudioFile(file);
+              scannedItems.add(item);
+            }
 
-        if (item.isSelected && item.needsFix) {
-          await AudioService.fixAudioItem(
-            item,
-            maxDimension: _targetDimension,
-            createBackup: _createBackups,
-            exportFolderCover: _exportFolderCover,
-          );
-          if (item.isConverted) convertedCount++;
-        }
+            if (item.isSelected && item.needsFix) {
+              await AudioService.fixAudioItem(
+                item,
+                maxDimension: _targetDimension,
+                createBackup: _createBackups,
+                exportFolderCover: _exportFolderCover,
+              );
+              if (item.isConverted) convertedCount++;
+            }
+          }),
+        );
+      }
+
+      if (mounted) {
+        setState(() {
+          _currentFile = chunk.last.path.split(Platform.pathSeparator).last;
+          _progress = end / total;
+          if (!isConvertMode && (i == 0 || i % 64 == 0 || end == total)) {
+            _items = List.from(scannedItems);
+          }
+        });
       }
     }
+
+    await AudioService.saveCache();
 
     if (mounted) {
       setState(() {
@@ -189,12 +548,12 @@ class _HomeScreenState extends State<HomeScreen> {
           _items = scannedItems;
           final needsFixCount = _items.where((i) => i.needsFix).length;
           _statusMessage = _isCancelled
-              ? 'Scan cancelled by user.'
-              : 'Scan complete: ${_items.length} files scanned ($needsFixCount need HiBy fix).';
+              ? 'Scan cancelled.'
+              : 'Scan complete: ${_items.length} tracks ($needsFixCount need fix).';
         } else {
           _statusMessage = _isCancelled
               ? 'Conversion cancelled.'
-              : 'Done! Successfully fixed $convertedCount tracks for HiBy R1.';
+              : 'Done! Successfully fixed $convertedCount tracks.';
         }
       });
     }
@@ -207,23 +566,25 @@ class _HomeScreenState extends State<HomeScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1C2230),
-        title: const Text('Restore All Backups?'),
+        backgroundColor: const Color(0xFF17171A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+        title: const Text('Restore all backups?'),
         content: Text(
           'This will revert all ${backedUp.length} tracks to their original uncompressed artwork.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF64FFDA),
-              foregroundColor: Colors.black,
-            ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Restore All'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF387AFF),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            ),
+            child: const Text('Restore all'),
           ),
         ],
       ),
@@ -233,7 +594,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() {
       _isBusy = true;
-      _statusMessage = 'Restoring original files from backup…';
+      _statusMessage = 'Restoring original backups...';
     });
 
     int restoredCount = 0;
@@ -300,614 +661,561 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final needsFixCount = _items
-        .where((i) => i.needsFix && !i.isConverted)
-        .length;
-    final compliantCount = _items
-        .where(
-          (i) => i.compliance == ArtworkCompliance.baselineJpeg && !i.needsFix,
-        )
-        .length;
+    final needsFixCount = _items.where((i) => i.needsFix && !i.isConverted).length;
+    final compliantCount = _items.where((i) => i.compliance == ArtworkCompliance.baselineJpeg && !i.needsFix).length;
     final fixedCount = _items.where((i) => i.isConverted).length;
-    final selectedCount = _items
-        .where((i) => i.isSelected && i.needsFix && !i.isConverted)
-        .length;
+    final selectedCount = _items.where((i) => i.isSelected && i.needsFix && !i.isConverted).length;
     final backupCount = _items.where((i) => i.hasBackup).length;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFB74D).withAlpha(40),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.album_rounded,
-                color: Color(0xFFFFB74D),
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 10),
-            const Text(
-              'Album Art Fixer',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-            ),
-          ],
-        ),
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFF222836),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF333C4F)),
-            ),
-            child: const Row(
-              children: [
-                Icon(
-                  Icons.audiotrack_rounded,
-                  color: Color(0xFF64FFDA),
-                  size: 14,
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            // Authentic One UI Large Expansive Header (Figma 36px 700 Bold Title)
+            SliverAppBar(
+              expandedHeight: 148.0,
+              pinned: true,
+              backgroundColor: Colors.black,
+              flexibleSpace: FlexibleSpaceBar(
+                centerTitle: false,
+                titlePadding: const EdgeInsets.fromLTRB(20, 0, 16, 14),
+                title: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF387AFF).withAlpha(40),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.album_rounded,
+                        color: Color(0xFF387AFF),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Album Art Fixer',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: -0.4,
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(width: 4),
-                Text(
-                  'HiBy R1 / DAP Ready',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF64FFDA),
-                    fontWeight: FontWeight.w600,
+              ),
+              actions: [
+                if (backupCount > 0)
+                  IconButton(
+                    icon: const Icon(Icons.history_rounded, color: Color(0xFF387AFF), size: 22),
+                    tooltip: 'Restore backups ($backupCount)',
+                    onPressed: _isBusy ? null : _restoreAllBackups,
                   ),
+                IconButton(
+                  icon: Icon(
+                    _showSettings ? Icons.tune_rounded : Icons.tune_outlined,
+                    color: _showSettings ? const Color(0xFF387AFF) : const Color(0xFF848487),
+                    size: 22,
+                  ),
+                  tooltip: 'Settings',
+                  onPressed: () => setState(() => _showSettings = !_showSettings),
                 ),
+                const SizedBox(width: 8),
               ],
             ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Top Config & Action Section
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: const Color(0xFF141822),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Directory Picker Card
-                InkWell(
-                  onTap: _isBusy ? null : _pickDirectory,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1C2230),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF2E384D)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.folder_open_rounded,
-                          color: Color(0xFFFFB74D),
-                          size: 28,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _selectedDirectory != null
-                                    ? 'Music Folder Selected'
-                                    : 'Choose Music Folder / SD Card',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                  color: Colors.white70,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _selectedDirectory ??
-                                    'Tap to select SD card or music directory',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _selectedDirectory != null
-                                      ? Colors.white
-                                      : Colors.white38,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        ElevatedButton(
-                          onPressed: _isBusy ? null : _pickDirectory,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2A344A),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: Text(
-                            _selectedDirectory != null ? 'Change' : 'Browse',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
 
-                // Settings Row: Max Dimension, Backup, Folder Cover
-                Row(
+            // One UI Content Area
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      flex: 3,
+                    // Subtitle / Status Overview (Sentence case, #848487)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 12),
+                      child: Text(
+                        _items.isNotEmpty
+                            ? '${_items.length} tracks • $needsFixCount need fix'
+                            : 'Select music directory to inspect artwork',
+                        style: const TextStyle(fontSize: 14, color: Color(0xFF848487)),
+                      ),
+                    ),
+
+                    // One UI Folder Card (26px radius, #17171A surface, #2E2E30 border)
+                    InkWell(
+                      onTap: _isBusy ? null : _pickDirectory,
+                      borderRadius: BorderRadius.circular(26),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 2,
-                        ),
+                        padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1C2230),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF2E384D)),
+                          color: const Color(0xFF17171A),
+                          borderRadius: BorderRadius.circular(26),
+                          border: Border.all(color: const Color(0xFF2E2E30)),
                         ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<int>(
-                            value: _targetDimension,
-                            isExpanded: true,
-                            dropdownColor: const Color(0xFF1C2230),
-                            items: const [
-                              DropdownMenuItem(
-                                value: 600,
-                                child: Text('Max 600x600 px'),
-                              ),
-                              DropdownMenuItem(
-                                value: 800,
-                                child: Text('Max 800x800 px (HiBy Best)'),
-                              ),
-                              DropdownMenuItem(
-                                value: 1000,
-                                child: Text('Max 1000x1000 px'),
-                              ),
-                              DropdownMenuItem(
-                                value: 0,
-                                child: Text('Keep Original Size'),
-                              ),
-                            ],
-                            onChanged: _isBusy
-                                ? null
-                                : (v) => setState(
-                                    () => _targetDimension = v ?? 1000,
-                                  ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Backup Switch
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C2230),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF2E384D)),
-                      ),
-                      child: Tooltip(
-                        message:
-                            'Save .original_artwork backup before modifying',
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text(
-                              'Backup',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white70,
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF242429),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Icon(
+                                Icons.folder_open_rounded,
+                                color: Color(0xFF387AFF),
+                                size: 24,
                               ),
                             ),
-                            Switch(
-                              value: _createBackups,
-                              activeThumbColor: const Color(0xFFFFB74D),
-                              onChanged: _isBusy
-                                  ? null
-                                  : (val) =>
-                                        setState(() => _createBackups = val),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Folder cover.jpg Switch
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C2230),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF2E384D)),
-                      ),
-                      child: Tooltip(
-                        message: 'Export cover.jpg into album folder for DAP directory browsing',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              'cover.jpg',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white70,
-                              ),
-                            ),
-                            Switch(
-                              value: _exportFolderCover,
-                              activeThumbColor: const Color(0xFF64FFDA),
-                              onChanged: _isBusy
-                                  ? null
-                                  : (val) => setState(
-                                      () => _exportFolderCover = val,
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _selectedDirectory != null ? 'Music directory' : 'Choose music folder',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                      color: Colors.white,
                                     ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _selectedDirectory ?? 'Browse storage or SD card',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: _selectedDirectory != null ? const Color(0xFF848487) : Colors.white38,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF242429),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFF2E2E30)),
+                              ),
+                              child: Text(
+                                _selectedDirectory != null ? 'Change' : 'Browse',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
                             ),
                           ],
                         ),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 12),
 
-                // Action Buttons (Scan, Fix, or Cancel)
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _isBusy
-                            ? () => setState(() => _isCancelled = true)
-                            : (_selectedDirectory == null
-                                  ? null
-                                  : () => _runProcess(isConvertMode: false)),
-                        icon: Icon(
-                          _isBusy
-                              ? Icons.stop_circle_outlined
-                              : Icons.search_rounded,
+                    // Expandable One UI Settings Card
+                    if (_showSettings) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF17171A),
+                          borderRadius: BorderRadius.circular(26),
+                          border: Border.all(color: const Color(0xFF2E2E30)),
                         ),
-                        label: Text(_isBusy ? 'Cancel' : 'Scan Library'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: _isBusy
-                              ? Colors.redAccent
-                              : const Color(0xFF64FFDA),
-                          side: BorderSide(
-                            color: _isBusy
-                                ? Colors.redAccent
-                                : const Color(0xFF64FFDA),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed:
-                            _isBusy ||
-                                _selectedDirectory == null ||
-                                selectedCount == 0
-                            ? null
-                            : () => _runProcess(isConvertMode: true),
-                        icon: const Icon(Icons.auto_fix_high_rounded),
-                        label: Text(
-                          selectedCount > 0
-                              ? 'Fix Selected ($selectedCount)'
-                              : 'Fix Album Art',
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFFB74D),
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          textStyle: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                // Restore Backups Banner
-                if (backupCount > 0) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF64FFDA).withAlpha(25),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF64FFDA).withAlpha(80),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.history_rounded,
-                          color: Color(0xFF64FFDA),
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '$backupCount original backups available to restore',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF64FFDA),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'CONVERSION SETTINGS',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF848487), letterSpacing: 0.8),
                             ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: _isBusy ? null : _restoreAllBackups,
-                          style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFF64FFDA),
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                          child: const Text(
-                            'Restore All',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                // Live Progress Indicator
-                if (_isBusy) ...[
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(
-                      value: _progress > 0 ? _progress : null,
-                      backgroundColor: const Color(0xFF242C3D),
-                      valueColor: const AlwaysStoppedAnimation(
-                        Color(0xFFFFB74D),
-                      ),
-                      minHeight: 6,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _currentFile,
-                    style: const TextStyle(fontSize: 11, color: Colors.white54),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-
-                const SizedBox(height: 8),
-                Text(
-                  _statusMessage,
-                  style: const TextStyle(fontSize: 12, color: Colors.white70),
-                ),
-              ],
-            ),
-          ),
-
-          // Stats Counters
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                _buildStatBadge('Total', '${_items.length}', Colors.white),
-                const SizedBox(width: 8),
-                _buildStatBadge(
-                  'Needs Fix',
-                  '$needsFixCount',
-                  const Color(0xFFFF7043),
-                  isSelected: _selectedFilter == 'Needs Fix',
-                  onTap: () => setState(() => _selectedFilter = 'Needs Fix'),
-                ),
-                const SizedBox(width: 8),
-                _buildStatBadge(
-                  'Compliant',
-                  '$compliantCount',
-                  const Color(0xFF66BB6A),
-                  isSelected: _selectedFilter == 'Compliant',
-                  onTap: () => setState(() => _selectedFilter = 'Compliant'),
-                ),
-                const SizedBox(width: 8),
-                _buildStatBadge(
-                  'Fixed',
-                  '$fixedCount',
-                  const Color(0xFF64FFDA),
-                  isSelected: _selectedFilter == 'Fixed',
-                  onTap: () => setState(() => _selectedFilter = 'Fixed'),
-                ),
-              ],
-            ),
-          ),
-
-          // Search Bar & Selection Toolbar
-          if (_items.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Column(
-                children: [
-                  TextField(
-                    decoration: InputDecoration(
-                      hintText: 'Search songs, artists, or albums…',
-                      hintStyle: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 13,
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.search,
-                        size: 18,
-                        color: Colors.white38,
-                      ),
-                      isDense: true,
-                      filled: true,
-                      fillColor: const Color(0xFF171B24),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Color(0xFF2E384D)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Color(0xFF2E384D)),
-                      ),
-                    ),
-                    onChanged: (val) => setState(() => _searchQuery = val),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      TextButton.icon(
-                        onPressed: _isBusy ? null : () => _selectAll(true),
-                        icon: const Icon(Icons.select_all_rounded, size: 18),
-                        label: Text(
-                          'Select Problem Tracks ($needsFixCount)',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFFFFB74D),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                      ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: _isBusy ? null : () => _selectAll(false),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.white54,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                        child: const Text(
-                          'Deselect All',
-                          style: TextStyle(fontSize: 12),
+                            const SizedBox(height: 14),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Max dimension', style: TextStyle(fontSize: 14, color: Colors.white)),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF242429),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: const Color(0xFF2E2E30)),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<int>(
+                                      value: _targetDimension,
+                                      dropdownColor: const Color(0xFF242429),
+                                      items: const [
+                                        DropdownMenuItem(value: 600, child: Text('600×600 px', style: TextStyle(fontSize: 13))),
+                                        DropdownMenuItem(value: 800, child: Text('800×800 px (Best)', style: TextStyle(fontSize: 13))),
+                                        DropdownMenuItem(value: 1000, child: Text('1000×1000 px', style: TextStyle(fontSize: 13))),
+                                        DropdownMenuItem(value: 0, child: Text('Original size', style: TextStyle(fontSize: 13))),
+                                      ],
+                                      onChanged: _isBusy ? null : (v) => setState(() => _targetDimension = v ?? 1000),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Divider(color: Color(0xFF2E2E30), height: 24),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Create backup files', style: TextStyle(fontSize: 14, color: Colors.white)),
+                                    Text('Keep .albumartfixer-backup file', style: TextStyle(fontSize: 11, color: Color(0xFF848487))),
+                                  ],
+                                ),
+                                Switch(
+                                  value: _createBackups,
+                                  activeThumbColor: const Color(0xFF387AFF),
+                                  onChanged: _isBusy ? null : (v) => setState(() => _createBackups = v),
+                                ),
+                              ],
+                            ),
+                            const Divider(color: Color(0xFF2E2E30), height: 24),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Export cover.jpg', style: TextStyle(fontSize: 14, color: Colors.white)),
+                                    Text('Save in song folder for DAP browsing', style: TextStyle(fontSize: 11, color: Color(0xFF848487))),
+                                  ],
+                                ),
+                                Switch(
+                                  value: _exportFolderCover,
+                                  activeThumbColor: const Color(0xFF34D399),
+                                  onChanged: _isBusy ? null : (v) => setState(() => _exportFolderCover = v),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ),
-                ],
+
+                    // Progress Indicator
+                    if (_isBusy || _progress > 0) ...[
+                      const SizedBox(height: 12),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: LinearProgressIndicator(
+                          value: _isBusy ? _progress : 1.0,
+                          backgroundColor: const Color(0xFF1C1C1E),
+                          valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF387AFF)),
+                          minHeight: 5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _currentFile.isNotEmpty ? _currentFile : _statusMessage,
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF848487), overflow: TextOverflow.ellipsis),
+                            ),
+                          ),
+                          Text(
+                            '${(_progress * 100).toInt()}%',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF387AFF)),
+                          ),
+                        ],
+                      ),
+                    ],
+
+                    // Quick Issue Alert Banner
+                    if (!_isBusy && _items.isNotEmpty && needsFixCount > 0) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF241818),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: const Color(0xFFFF5E57).withAlpha(100)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline_rounded, color: Color(0xFFFF5E57), size: 22),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '$needsFixCount tracks have incompatible art',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                                  ),
+                                  const Text('Ready to convert to standard Baseline JPEG', style: TextStyle(fontSize: 11, color: Colors.white60)),
+                                ],
+                              ),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => _selectAll(true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF387AFF),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                              child: const Text('Select all', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    // Search Pill & Filter Capsules (when library is loaded)
+                    if (_items.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF17171A),
+                          borderRadius: BorderRadius.circular(23),
+                          border: Border.all(color: const Color(0xFF2E2E30)),
+                        ),
+                        child: TextField(
+                          onChanged: (val) => setState(() => _searchQuery = val),
+                          style: const TextStyle(fontSize: 13, color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: 'Search songs, artist, or album...',
+                            hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF848487)),
+                            prefixIcon: const Icon(Icons.search_rounded, size: 20, color: Color(0xFF848487)),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear_rounded, size: 16, color: Color(0xFF848487)),
+                                    onPressed: () => setState(() => _searchQuery = ''),
+                                  )
+                                : null,
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildOneUiFilterPill('All', _items.length),
+                            _buildOneUiFilterPill('Needs Fix', needsFixCount, badgeColor: const Color(0xFFFF5E57)),
+                            _buildOneUiFilterPill('Compliant', compliantCount, badgeColor: const Color(0xFF34D399)),
+                            _buildOneUiFilterPill('Fixed', fixedCount, badgeColor: const Color(0xFF34D399)),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: () => _selectAll(false),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                backgroundColor: const Color(0xFF17171A),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                              child: const Text('Deselect', style: TextStyle(fontSize: 12, color: Color(0xFF848487))),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ],
+                ),
               ),
             ),
 
-          const Divider(height: 1, color: Color(0xFF222836)),
-
-          // Items List
-          Expanded(
-            child: _filteredItems.isEmpty
-                ? Center(
+            // Track List / Empty State
+            if (_items.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          _items.isEmpty
-                              ? Icons.music_note_rounded
-                              : Icons.filter_alt_off_rounded,
-                          size: 56,
-                          color: Colors.white24,
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF17171A),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            _isBusy ? Icons.hourglass_top_rounded : Icons.library_music_rounded,
+                            size: 46,
+                            color: const Color(0xFF387AFF),
+                          ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 18),
                         Text(
-                          _items.isEmpty
-                              ? 'No audio files scanned yet'
-                              : 'No tracks matching current filter/search',
-                          style: const TextStyle(
-                            color: Colors.white38,
-                            fontSize: 14,
-                          ),
+                          _selectedDirectory != null ? 'Ready to scan' : 'No folder selected',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white),
                         ),
-                        if (_selectedFilter != 'All' ||
-                            _searchQuery.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          TextButton(
-                            onPressed: () => setState(() {
-                              _selectedFilter = 'All';
-                              _searchQuery = '';
-                            }),
-                            child: const Text('Reset Filter & Search'),
+                        const SizedBox(height: 6),
+                        Text(
+                          _statusMessage,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Color(0xFF848487), fontSize: 13),
+                        ),
+                        const SizedBox(height: 22),
+                        if (_selectedDirectory == null)
+                          ElevatedButton.icon(
+                            onPressed: _pickDirectory,
+                            icon: const Icon(Icons.folder_open_rounded, size: 18),
+                            label: const Text('Select music folder'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF387AFF),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            ),
                           ),
-                        ],
                       ],
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    itemCount: _filteredItems.length,
-                    itemBuilder: (context, index) {
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
                       final item = _filteredItems[index];
                       return _buildTrackCard(item);
                     },
+                    childCount: _filteredItems.length,
                   ),
-          ),
-        ],
+                ),
+              ),
+          ],
+        ),
+      ),
+
+      // One UI Bottom Pill Action Bar (Samsung Blue 52dp)
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+        decoration: const BoxDecoration(
+          color: Colors.black,
+          border: Border(top: BorderSide(color: Color(0xFF1C1C1E))),
+        ),
+        child: Row(
+          children: [
+            if (_items.isNotEmpty || _isBusy) ...[
+              Expanded(
+                flex: 2,
+                child: SizedBox(
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    onPressed: _isBusy
+                        ? () => setState(() => _isCancelled = true)
+                        : (_selectedDirectory == null
+                              ? null
+                              : () => _runProcess(isConvertMode: false)),
+                    icon: Icon(
+                      _isBusy ? Icons.stop_circle_outlined : Icons.refresh_rounded,
+                      size: 18,
+                    ),
+                    label: Text(_isBusy ? 'Cancel' : 'Rescan'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Color(0xFF2E2E30)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+
+            Expanded(
+              flex: 3,
+              child: SizedBox(
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: _isBusy
+                      ? null
+                      : (_selectedDirectory == null
+                            ? _pickDirectory
+                            : (_items.isEmpty
+                                  ? () => _runProcess(isConvertMode: false)
+                                  : (selectedCount > 0 ? () => _runProcess(isConvertMode: true) : null))),
+                  icon: Icon(
+                    _selectedDirectory == null
+                        ? Icons.folder_open_rounded
+                        : (_items.isEmpty ? Icons.search_rounded : Icons.auto_fix_high_rounded),
+                    size: 18,
+                  ),
+                  label: Text(
+                    _selectedDirectory == null
+                        ? 'Select folder'
+                        : (_items.isEmpty
+                              ? 'Scan library'
+                              : (selectedCount > 0 ? 'Fix ($selectedCount)' : 'Select tracks')),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF387AFF),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(0xFF242429),
+                    disabledForegroundColor: const Color(0xFF848487),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildStatBadge(
-    String label,
-    String value,
-    Color color, {
-    bool isSelected = false,
-    VoidCallback? onTap,
-  }) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap ?? () => setState(() => _selectedFilter = 'All'),
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? color.withAlpha(50) : const Color(0xFF171B24),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isSelected ? color : const Color(0xFF272F3E),
-              width: isSelected ? 1.5 : 1,
+  Widget _buildOneUiFilterPill(String title, int count, {Color? badgeColor}) {
+    final isSelected = _selectedFilter == title;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedFilter = title),
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : const Color(0xFF17171A),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFF2E2E30)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? Colors.black : Colors.white70,
+              ),
             ),
-          ),
-          child: Column(
-            children: [
-              Text(
-                value,
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.black
+                    : (badgeColor?.withAlpha(40) ?? const Color(0xFF242429)),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 10,
                   fontWeight: FontWeight.bold,
-                  color: color,
+                  color: isSelected ? Colors.white : (badgeColor ?? Colors.white70),
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: const TextStyle(fontSize: 11, color: Colors.white60),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -918,197 +1226,183 @@ class _HomeScreenState extends State<HomeScreen> {
     String badgeText;
 
     if (item.isConverted) {
-      badgeColor = const Color(0xFF64FFDA);
-      badgeText = 'Fixed (Baseline)';
+      badgeColor = const Color(0xFF34D399);
+      badgeText = 'FIXED BASELINE';
     } else {
       switch (item.compliance) {
         case ArtworkCompliance.baselineJpeg:
           if (item.needsFix) {
-            badgeColor = const Color(0xFFFFB74D);
-            badgeText = 'Oversized Baseline';
+            badgeColor = const Color(0xFFFFA502);
+            badgeText = 'OVERSIZED';
           } else {
-            badgeColor = const Color(0xFF66BB6A);
-            badgeText = 'Baseline JPEG';
+            badgeColor = const Color(0xFF34D399);
+            badgeText = 'BASELINE OK';
           }
           break;
         case ArtworkCompliance.progressiveJpeg:
-          badgeColor = const Color(0xFFFF5252);
-          badgeText = 'Progressive (HiBy Incompatible)';
-          break;
-        case ArtworkCompliance.extendedJpeg:
-          badgeColor = const Color(0xFFFF5252);
-          badgeText = 'Extended JPEG';
+          badgeColor = const Color(0xFFFF5E57);
+          badgeText = 'PROGRESSIVE';
           break;
         case ArtworkCompliance.cmykJpeg:
-          badgeColor = const Color(0xFFFF5252);
-          badgeText = 'CMYK (Inverts Colors)';
+          badgeColor = const Color(0xFFFF4757);
+          badgeText = 'CMYK';
           break;
         case ArtworkCompliance.png:
-          badgeColor = const Color(0xFFFF9800);
-          badgeText = 'PNG Cover (Needs JPG)';
+          badgeColor = const Color(0xFF387AFF);
+          badgeText = 'PNG';
+          break;
+        case ArtworkCompliance.extendedJpeg:
+          badgeColor = const Color(0xFFFF7043);
+          badgeText = 'EXTENDED';
           break;
         case ArtworkCompliance.noArtwork:
-          badgeColor = Colors.grey;
-          badgeText = 'No Artwork';
-          break;
-        case ArtworkCompliance.error:
-          badgeColor = Colors.redAccent;
-          badgeText = 'Error';
+          badgeColor = const Color(0xFF757575);
+          badgeText = 'NO COVER';
           break;
         default:
-          badgeColor = Colors.orangeAccent;
-          badgeText = 'Unsupported Format';
+          badgeColor = const Color(0xFFE040FB);
+          badgeText = 'NON-STANDARD';
       }
     }
 
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF17171A),
+        borderRadius: BorderRadius.circular(22),
+        border: item.isSelected && item.needsFix
+            ? Border.all(color: const Color(0xFF387AFF).withAlpha(140), width: 1.2)
+            : Border.all(color: const Color(0xFF2E2E30)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (item.needsFix && !item.isConverted)
             Checkbox(
               value: item.isSelected,
-              activeColor: const Color(0xFFFFB74D),
-              checkColor: Colors.black,
+              activeColor: const Color(0xFF387AFF),
+              checkColor: Colors.white,
               onChanged: _isBusy
                   ? null
-                  : (val) {
-                      setState(() {
-                        item.isSelected = val ?? false;
-                      });
-                    },
+                  : (val) => setState(() => item.isSelected = val ?? false),
+            )
+          else
+            const SizedBox(width: 8),
+
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              width: 52,
+              height: 52,
+              color: const Color(0xFF242429),
+              child: item.thumbnailBytes != null
+                  ? Image.memory(
+                      item.thumbnailBytes!,
+                      fit: BoxFit.cover,
+                      cacheWidth: 96,
+                      cacheHeight: 96,
+                      errorBuilder: (_, _, _) => const Icon(
+                        Icons.broken_image_rounded,
+                        color: Colors.white24,
+                        size: 24,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.music_note_rounded,
+                      color: Colors.white24,
+                      size: 24,
+                    ),
             ),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: 48,
-                height: 48,
-                child: item.thumbnailBytes != null
-                    ? Image.memory(
-                        item.thumbnailBytes!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(
-                              Icons.broken_image,
-                              size: 28,
-                              color: Colors.white24,
-                            ),
-                      )
-                    : Container(
-                        color: const Color(0xFF222836),
-                        child: const Icon(
-                          Icons.music_note,
-                          color: Colors.white24,
+          ),
+          const SizedBox(width: 12),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title ?? item.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${item.artist ?? 'Unknown artist'} • ${item.extension.toUpperCase()}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF848487),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withAlpha(25),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: badgeColor.withAlpha(120), width: 0.8),
+                      ),
+                      child: Text(
+                        badgeText,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: badgeColor,
+                          letterSpacing: 0.5,
                         ),
                       ),
-              ),
-            ),
-          ],
-        ),
-        title: Text(
-          item.title ?? item.fileName,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${item.artist ?? 'Unknown Artist'} • ${item.extension.toUpperCase()}',
-              style: const TextStyle(fontSize: 12, color: Colors.white60),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: badgeColor.withAlpha(40),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: badgeColor.withAlpha(100)),
-                  ),
-                  child: Text(
-                    badgeText,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: badgeColor,
                     ),
-                  ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        item.artworkWidth != null
+                            ? '${item.artworkWidth}×${item.artworkHeight} px'
+                            : item.statusDescription,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.white38,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                if (item.artworkWidth != null &&
-                    item.artworkHeight != null) ...[
-                  const SizedBox(width: 6),
-                  Text(
-                    '${item.artworkWidth}x${item.artworkHeight}',
-                    style: const TextStyle(fontSize: 10, color: Colors.white38),
-                  ),
-                ],
               ],
             ),
-            if (item.conversionResult != null) ...[
-              const SizedBox(height: 2),
-              Text(
-                item.conversionResult!,
-                style: const TextStyle(fontSize: 11, color: Color(0xFF64FFDA)),
-              ),
-            ],
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (item.hasBackup)
-              IconButton(
-                icon: const Icon(
-                  Icons.history_rounded,
-                  color: Color(0xFF64FFDA),
-                ),
-                tooltip: 'Restore original artwork from backup',
-                onPressed: _isBusy
-                    ? null
-                    : () async {
-                        setState(() => _isBusy = true);
-                        await AudioService.restoreBackup(item);
-                        if (mounted) setState(() => _isBusy = false);
-                      },
-              ),
-            if (item.needsFix && !item.isConverted)
-              IconButton(
-                icon: const Icon(
-                  Icons.build_circle_outlined,
-                  color: Color(0xFFFFB74D),
-                ),
-                tooltip: 'Fix this single track',
-                onPressed: _isBusy
-                    ? null
-                    : () async {
-                        setState(() => _isBusy = true);
-                        await AudioService.fixAudioItem(
-                          item,
-                          maxDimension: _targetDimension,
-                          createBackup: _createBackups,
-                          exportFolderCover: _exportFolderCover,
-                        );
-                        if (mounted) setState(() => _isBusy = false);
-                      },
-              )
-            else if (item.isConverted)
-              const Icon(
-                Icons.check_circle_rounded,
-                color: Color(0xFF64FFDA),
-                size: 22,
-              ),
-          ],
-        ),
+          ),
+
+          if (item.hasBackup)
+            IconButton(
+              icon: const Icon(Icons.restore_rounded, size: 20, color: Color(0xFF387AFF)),
+              tooltip: 'Restore original artwork',
+              onPressed: _isBusy
+                  ? null
+                  : () async {
+                      final ok = await AudioService.restoreBackup(item);
+                      if (mounted) {
+                        setState(() {
+                          _statusMessage = ok
+                              ? 'Restored ${item.fileName}'
+                              : 'Failed to restore';
+                        });
+                      }
+                    },
+            )
+          else if (item.isConverted)
+            const Padding(
+              padding: EdgeInsets.only(right: 8),
+              child: Icon(Icons.check_circle_rounded, color: Color(0xFF34D399), size: 20),
+            ),
+        ],
       ),
     );
   }

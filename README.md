@@ -1,10 +1,20 @@
-# 🎵 Album Art Fixer for DAPs & HiBy OS
+<p align="center">
+  <img src="assets/icon.png" width="120" height="120" alt="Album Art Fixer Icon" style="border-radius: 24px;" />
+</p>
 
-[![Flutter](https://img.shields.io/badge/Flutter-3.41-02569B?logo=flutter)](https://flutter.dev)
-[![Dart](https://img.shields.io/badge/Dart-3.11-0175C2?logo=dart)](https://dart.dev)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android)](https://www.android.com)
-[![HiBy R1 Ready](https://img.shields.io/badge/Hardware-HiBy%20R1%20%2F%20DAP%20Tested-FFB74D)](https://store.hiby.com)
+<h1 align="center">Album Art Fixer for DAPs & HiBy OS</h1>
+
+<p align="center">
+  <b>v1.0.1</b> • High-performance Android & HiBy R1 audio artwork optimizer
+</p>
+
+<p align="center">
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.41-02569B?logo=flutter" alt="Flutter" /></a>
+  <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.11-0175C2?logo=dart" alt="Dart" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" /></a>
+  <a href="https://www.android.com"><img src="https://img.shields.io/badge/Platform-Android-3DDC84?logo=android" alt="Platform" /></a>
+  <a href="https://store.hiby.com"><img src="https://img.shields.io/badge/Hardware-HiBy%20R1%20%2F%20DAP%20Tested-FFB74D" alt="HiBy R1" /></a>
+</p>
 
 A high-performance Android utility engineered to diagnose, fix, and optimize embedded audio album artwork for dedicated Digital Audio Players (DAPs) such as the **HiBy R1**, Shanling, Sony Walkman, Astell&Kern, and Fiio.
 
