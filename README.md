@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Lakhiwal/Album-Art-Fixer/releases/latest"><img src="https://img.shields.io/github/v/release/Lakhiwal/Album-Art-Fixer?color=387AFF&label=Latest%20Release&logo=github" alt="Latest Release" /></a>
   <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.41-02569B?logo=flutter" alt="Flutter" /></a>
   <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.11-0175C2?logo=dart" alt="Dart" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" /></a>
@@ -17,6 +18,10 @@
 </p>
 
 A high-performance Android utility engineered to diagnose, fix, and optimize embedded audio album artwork for dedicated Digital Audio Players (DAPs) such as the **HiBy R1**, Shanling, Sony Walkman, Astell&Kern, and Fiio.
+
+<p align="center">
+  <a href="https://github.com/Lakhiwal/Album-Art-Fixer/releases/latest"><b>📥 Download Latest APK (v1.0.1)</b></a>
+</p>
 
 ---
 
@@ -57,7 +62,8 @@ Dedicated DAPs like the **HiBy R1** utilize resource-constrained hardware decode
 - 📁 **Folder Cover Export:** Optionally outputs a standardized `cover.jpg` into each album directory for file-browser based DAPs.
 - 🔍 **Real-Time Search & Filtering:** Filter by `Needs Fix`, `Compliant`, `Fixed`, or search across file name, song title, artist, and album tags.
 - 🛑 **Graceful Cancellation:** Safely halt scans or conversions mid-process without data loss or file corruption.
-- 🎨 **Audiophile Dark UI:** Modern Material 3 dark aesthetic with high contrast and responsive feedback.
+- 🎨 **Samsung One UI Design:** Pure AMOLED Black (`#000000`), `#17171A` surface cards with 26px squircles, Samsung Blue (`#387AFF`) accents, and ergonomic one-handed bottom actions.
+- ⚡ **16x Concurrent Parallel Scanning:** Blazing-fast folder scanning with persistent disk caching.
 
 ---
 
@@ -99,8 +105,8 @@ cd Album-Art-Fixer
 # Install dependencies
 flutter pub get
 
-# Build Release APK
-flutter build apk --release --target-platform android-arm64
+# Build Release APK with R8 Shrinking & Dart Obfuscation
+flutter build apk --release --obfuscate --split-debug-info=build/app/outputs/symbols
 
 # Install to connected device via ADB
 adb install -r build/app/outputs/flutter-apk/app-release.apk
