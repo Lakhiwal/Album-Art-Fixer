@@ -57,6 +57,8 @@ captures/
 /android/app/release
 *.keystore
 *.jks
+*.apk
+*.aab
 
 # Symbolication & Obfuscation
 app.*.symbols
